@@ -217,13 +217,13 @@ async function scrapeTwitter(url) {
 
     try {
         const result = await dyluxTwitter(url);
-        if (result && result.desc && result.desc.length > 0) {
-            if (result.audio && result.audio !== 'https://twdown.net/undefined') {
-                return { success: true, url: result.audio, title: result.desc || 'Twitter Video', type: 'video' };
-            }
+        const isValidUrl = (u) => u && typeof u === 'string' && u.startsWith('http') && !u.endsWith('/undefined') && u.length > 30;
+        const videoUrl = isValidUrl(result.HD) ? result.HD : isValidUrl(result.SD) ? result.SD : null;
+        if (videoUrl) {
+            return { success: true, url: videoUrl, title: result.desc || 'Twitter Video', type: 'video' };
         }
     } catch (err) {
-        console.error('[Twitter dylux error]', err.message || err);
+        console.error('[Twitter twdown error]', err.message || err);
     }
 
     try {
@@ -239,7 +239,7 @@ async function scrapeTwitter(url) {
                 const mp4s = variants.filter(v => v.content_type === 'video/mp4');
                 mp4s.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
                 const videoUrl = mp4s.length > 0 ? mp4s[0].url : video.url;
-                return { success: true, url: videoUrl, title: tweet.text || 'Twitter Video', type: 'video' };
+                if (videoUrl) return { success: true, url: videoUrl, title: tweet.text || 'Twitter Video', type: 'video' };
             }
             if (tweet.media.photos && tweet.media.photos.length > 0) {
                 return { success: true, url: tweet.media.photos[0].url, title: tweet.text || 'Twitter Image', type: 'image' };
@@ -247,6 +247,26 @@ async function scrapeTwitter(url) {
         }
     } catch (err) {
         console.error('[Twitter fxtwitter error]', err.message);
+    }
+
+    try {
+        const res2 = await axios.get(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 10000
+        });
+        const d = res2.data;
+        if (d && typeof d === 'object' && d.media_extended && d.media_extended.length > 0) {
+            const videos = d.media_extended.filter(m => m.type === 'video');
+            if (videos.length > 0) {
+                return { success: true, url: videos[0].url, title: d.text || 'Twitter Video', type: 'video' };
+            }
+            const gifs = d.media_extended.filter(m => m.type === 'gif');
+            if (gifs.length > 0) {
+                return { success: true, url: gifs[0].url, title: d.text || 'Twitter GIF', type: 'video' };
+            }
+        }
+    } catch (err) {
+        console.error('[Twitter vxtwitter error]', err.message);
     }
 
     try {
