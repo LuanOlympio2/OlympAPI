@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { verifyApiKey } = require('../middleware/authMiddleware');
-const { yta, ytv } = require('api-dylux');
 const scraper = require('../services/scraperService');
 
 router.use(verifyApiKey);
@@ -11,7 +10,7 @@ router.post('/', async (req, res) => {
         const { url, type } = req.body;
 
         if (!url) {
-            return res.status(400).json({ success: false, error: "URL é obrigatória" });
+            return res.status(400).json({ success: false, error: 'URL é obrigatória' });
         }
 
         const lowerUrl = url.toLowerCase();
@@ -30,29 +29,20 @@ router.post('/', async (req, res) => {
         } else if (lowerUrl.includes('kwai.com') || lowerUrl.includes('kuaishou.com')) {
             result = await scraper.scrapeKwai(url);
         } else {
-            const isAudio = type === 'audio';
-            const dlResult = isAudio ? await yta(url) : await ytv(url);
-            if (dlResult && dlResult.dl_url) {
-                result = {
-                    success: true,
-                    url: dlResult.dl_url,
-                    title: dlResult.title || 'Mídia',
-                    type: isAudio ? 'audio' : 'video'
-                };
-            }
+            result = await scraper.downloadYouTube(url, type === 'audio');
         }
 
         if (result && result.success) {
             return res.json(result);
         }
 
-        throw new Error("Não foi possível obter a URL direta.");
+        throw new Error('Não foi possível obter a URL direta.');
 
     } catch (error) {
-        console.error("[Download Route Error]", error.message);
+        console.error('[Download Route Error]', error.message || error);
         return res.status(500).json({
             success: false,
-            error: error.message || "Falha ao processar a extração."
+            error: error.message || 'Falha ao processar a extração.'
         });
     }
 });
