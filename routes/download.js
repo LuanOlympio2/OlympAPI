@@ -2,14 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { verifyApiKey } = require('../middleware/authMiddleware');
 const { yta, ytv } = require('api-dylux');
+const scraper = require('../services/scraperService');
 
-// Todas as rotas protegidas pela API Key
 router.use(verifyApiKey);
 
-/**
- * POST /download
- * Body: { url: "...", type: "video" | "audio" }
- */
 router.post('/', async (req, res) => {
     try {
         const { url, type } = req.body;
@@ -18,31 +14,42 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ success: false, error: "URL é obrigatória" });
         }
 
-        const isAudio = type === 'audio';
-        
-        console.log(`[Dylux API] Extraindo ${isAudio ? 'áudio' : 'vídeo'} de: ${url}`);
-        
+        const lowerUrl = url.toLowerCase();
         let result;
-        if (isAudio) {
-            result = await yta(url);
+
+        if (lowerUrl.includes('tiktok.com')) {
+            result = await scraper.scrapeTikTok(url);
+        } else if (lowerUrl.includes('instagram.com')) {
+            result = await scraper.scrapeInstagram(url);
+        } else if (lowerUrl.includes('facebook.com') || lowerUrl.includes('fb.watch')) {
+            result = await scraper.scrapeFacebook(url);
+        } else if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com')) {
+            result = await scraper.scrapeTwitter(url);
+        } else if (lowerUrl.includes('reddit.com')) {
+            result = await scraper.scrapeReddit(url);
+        } else if (lowerUrl.includes('kwai.com') || lowerUrl.includes('kuaishou.com')) {
+            result = await scraper.scrapeKwai(url);
         } else {
-            result = await ytv(url);
+            const isAudio = type === 'audio';
+            const dlResult = isAudio ? await yta(url) : await ytv(url);
+            if (dlResult && dlResult.dl_url) {
+                result = {
+                    success: true,
+                    url: dlResult.dl_url,
+                    title: dlResult.title || 'Mídia',
+                    type: isAudio ? 'audio' : 'video'
+                };
+            }
         }
 
-        if (result && result.dl_url) {
-            return res.json({
-                success: true,
-                url: result.dl_url,
-                title: result.title || 'Mídia',
-                type: isAudio ? 'audio' : 'video'
-            });
+        if (result && result.success) {
+            return res.json(result);
         }
 
-        throw new Error("Não foi possível obter a URL direta através da API proxy Dylux.");
+        throw new Error("Não foi possível obter a URL direta.");
 
     } catch (error) {
         console.error("[Download Route Error]", error.message);
-        
         return res.status(500).json({
             success: false,
             error: error.message || "Falha ao processar a extração."
